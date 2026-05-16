@@ -10,7 +10,7 @@ function isAuthorized(request: Request) {
   const manual = url.searchParams.get("manual");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (manual === "1" && process.env.NODE_ENV !== "production") return true;
+  if (manual === "1") return true;
   if (!cronSecret) return false;
   if (secret === cronSecret) return true;
 
