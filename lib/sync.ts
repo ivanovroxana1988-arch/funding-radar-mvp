@@ -1,11 +1,19 @@
-import { getSupabaseAdmin, type Call } from "./supabase"
+import { getSupabaseAdmin, isSupabaseConfigured, type Call } from "./supabase"
 import { getEnabledSources, type FundingSource } from "./sources"
 import * as cheerio from "cheerio"
 import OpenAI from "openai"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization to avoid build-time errors
+let _openai: OpenAI | null = null
+
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return _openai
+}
 
 export interface SyncResult {
   source_id: string
@@ -23,7 +31,7 @@ async function classifyWithAI(
 ): Promise<{ summary: string; tags: string[] }> {
   try {
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini"
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model,
       messages: [
         {
@@ -204,6 +212,10 @@ async function syncSource(source: FundingSource): Promise<SyncResult> {
 }
 
 export async function syncAllSources(): Promise<SyncResult[]> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase is not configured")
+  }
+  
   const sources = getEnabledSources()
   const results: SyncResult[] = []
 
