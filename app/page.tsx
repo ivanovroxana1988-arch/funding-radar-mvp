@@ -28,6 +28,7 @@ export default function HomePage() {
   const [calls, setCalls] = useState<FundingCall[]>([]);
   const [profiles, setProfiles] = useState<FundingProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
+  const [adminSecret, setAdminSecret] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [query, setQuery] = useState("");
@@ -53,7 +54,11 @@ export default function HomePage() {
   async function runSync() {
     setSyncing(true);
     setMessage("");
-    const res = await fetch("/api/cron/sync-calls?manual=1");
+    const secret = adminSecret.trim();
+    const path = secret
+      ? `/api/cron/sync-calls?secret=${encodeURIComponent(secret)}`
+      : "/api/cron/sync-calls?manual=1";
+    const res = await fetch(path);
     const data = await res.json();
     setMessage(data.message ?? data.error ?? "Sync finalizat.");
     setSyncing(false);
@@ -112,6 +117,13 @@ export default function HomePage() {
           <h1>Radar apeluri europene</h1>
           <p className="muted">Dashboard pentru apeluri de finantare, analiza AI, scor de relevanta si verificari manuale.</p>
           <div className="toolbar">
+            <input
+              className="input secret-input"
+              placeholder="CRON_SECRET pentru sync manual"
+              type="password"
+              value={adminSecret}
+              onChange={(event) => setAdminSecret(event.target.value)}
+            />
             <button className="button" onClick={runSync} disabled={syncing}>{syncing ? "Sincronizez..." : "Ruleaza sync"}</button>
             <button className="button secondary" onClick={loadCalls}>Refresh</button>
             <button className="button secondary" onClick={exportCsv} disabled={filtered.length === 0}>Export CSV</button>
