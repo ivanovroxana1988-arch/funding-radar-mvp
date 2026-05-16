@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "latest",
+    "@types/pdf-parse": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "tsx": "latest",
