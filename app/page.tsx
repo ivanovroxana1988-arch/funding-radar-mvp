@@ -1,10 +1,11 @@
-import { getSupabaseAdmin } from "@/lib/supabase"
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase"
 import { CallsTable } from "@/components/calls-table"
 import { SyncStatus } from "@/components/sync-status"
 
 export const revalidate = 60 // Revalidate every minute
 
 async function getCalls() {
+  if (!isSupabaseConfigured()) return []
   const supabase = getSupabaseAdmin()
   const { data: calls, error } = await supabase
     .from("calls")
@@ -21,6 +22,7 @@ async function getCalls() {
 }
 
 async function getLastSync() {
+  if (!isSupabaseConfigured()) return []
   const supabase = getSupabaseAdmin()
   const { data: logs } = await supabase
     .from("sync_logs")
@@ -32,6 +34,7 @@ async function getLastSync() {
 }
 
 export default async function HomePage() {
+  const configured = isSupabaseConfigured()
   const [calls, syncLogs] = await Promise.all([getCalls(), getLastSync()])
 
   return (
@@ -48,6 +51,14 @@ export default async function HomePage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {!configured && (
+          <div className="mb-8 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
+            <h3 className="font-semibold text-yellow-600">Configurare necesara</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Variabilele de mediu Supabase nu sunt configurate. Aplicatia va functiona complet pe Vercel dupa deploy.
+            </p>
+          </div>
+        )}
         <div className="mb-8">
           <SyncStatus logs={syncLogs} />
         </div>

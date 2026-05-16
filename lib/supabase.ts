@@ -6,6 +6,10 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 // Lazy initialization to avoid errors during build/dev when env vars may not be available
 let _supabaseAdmin: SupabaseClient | null = null
 
+export function isSupabaseConfigured(): boolean {
+  return Boolean(supabaseUrl && supabaseServiceKey)
+}
+
 export function getSupabaseAdmin(): SupabaseClient {
   if (!_supabaseAdmin) {
     if (!supabaseUrl || !supabaseServiceKey) {
