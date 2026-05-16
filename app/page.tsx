@@ -1,11 +1,12 @@
-import { supabaseAdmin } from "@/lib/supabase"
+import { getSupabaseAdmin } from "@/lib/supabase"
 import { CallsTable } from "@/components/calls-table"
 import { SyncStatus } from "@/components/sync-status"
 
 export const revalidate = 60 // Revalidate every minute
 
 async function getCalls() {
-  const { data: calls, error } = await supabaseAdmin
+  const supabase = getSupabaseAdmin()
+  const { data: calls, error } = await supabase
     .from("calls")
     .select("*")
     .order("created_at", { ascending: false })
@@ -20,7 +21,8 @@ async function getCalls() {
 }
 
 async function getLastSync() {
-  const { data: logs } = await supabaseAdmin
+  const supabase = getSupabaseAdmin()
+  const { data: logs } = await supabase
     .from("sync_logs")
     .select("*")
     .order("started_at", { ascending: false })

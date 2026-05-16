@@ -1,4 +1,4 @@
-import { supabaseAdmin, type Call } from "./supabase"
+import { getSupabaseAdmin, type Call } from "./supabase"
 import { getEnabledSources, type FundingSource } from "./sources"
 import * as cheerio from "cheerio"
 import OpenAI from "openai"
@@ -136,8 +136,10 @@ async function syncSource(source: FundingSource): Promise<SyncResult> {
   }
 
   try {
+    const supabase = getSupabaseAdmin()
+    
     // Log start
-    const { data: logEntry } = await supabaseAdmin
+    const { data: logEntry } = await supabase
       .from("sync_logs")
       .insert({
         source_id: source.id,
@@ -154,7 +156,7 @@ async function syncSource(source: FundingSource): Promise<SyncResult> {
     // Process each call
     for (const call of calls) {
       // Check if exists
-      const { data: existing } = await supabaseAdmin
+      const { data: existing } = await supabase
         .from("calls")
         .select("id")
         .eq("source_id", call.source_id!)
@@ -168,7 +170,7 @@ async function syncSource(source: FundingSource): Promise<SyncResult> {
           call.description || ""
         )
 
-        await supabaseAdmin.from("calls").insert({
+        await supabase.from("calls").insert({
           ...call,
           ai_summary: summary,
           ai_tags: tags,
@@ -181,7 +183,7 @@ async function syncSource(source: FundingSource): Promise<SyncResult> {
 
     // Update log
     if (logEntry) {
-      await supabaseAdmin
+      await supabase
         .from("sync_logs")
         .update({
           status: "success",
