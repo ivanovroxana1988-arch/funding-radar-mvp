@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const result = await syncAllSources();
 
   return NextResponse.json({
-    message: `Sync finalizat: ${result.insertedOrUpdated} apeluri procesate, ${result.documentsSaved} documente salvate.`,
+    message: `Sync finalizat: ${result.insertedOrUpdated} noi/modificate, ${result.unchanged} neschimbate, ${result.documentsSaved} documente, ${result.analyzedCalls} analizate AI, ${result.matchesSaved} potriviri salvate.`,
     ...result,
   });
 }
