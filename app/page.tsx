@@ -187,6 +187,8 @@ export default function HomePage() {
             <button className="button secondary" onClick={loadCalls}>Refresh</button>
             <button className="button secondary" onClick={exportCsv} disabled={filtered.length === 0}>Export CSV</button>
             <Link className="button secondary" href="/profiles">Profiluri</Link>
+            <Link className="button secondary" href="/project-ideas">Idei proiect</Link>
+            <Link className="button secondary" href="/matches">Rezultate</Link>
           </div>
           {message && <p className="notice">{message}</p>}
         </div>
