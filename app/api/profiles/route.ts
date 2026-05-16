@@ -20,19 +20,25 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const profilePrompt = typeof body.profile_prompt === "string" ? body.profile_prompt.trim() : "";
 
-  if (!body.name || !body.profile_prompt) {
-    return NextResponse.json({ error: "Missing name or profile_prompt." }, { status: 400 });
+  if (!name || !profilePrompt) {
+    return NextResponse.json({ error: "Completeaza numele profilului si descrierea libera." }, { status: 400 });
   }
 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("funding_profiles")
-    .insert({
-      name: String(body.name),
-      description: body.description ? String(body.description) : null,
-      profile_prompt: String(body.profile_prompt),
-    })
+    .upsert(
+      {
+        name,
+        description: body.description ? String(body.description) : null,
+        profile_prompt: profilePrompt,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "name" }
+    )
     .select("*")
     .single();
 
@@ -40,5 +46,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ profile: data });
+  return NextResponse.json({ profile: data, message: "Profil salvat." });
 }
