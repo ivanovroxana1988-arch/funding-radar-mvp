@@ -17,11 +17,61 @@ type FundingCall = {
   recommendation: string | null;
   summary: string | null;
   manual_checks: string[] | null;
+  created_at: string;
+  updated_at: string;
 };
 
 function csvEscape(value: unknown) {
   const text = value == null ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function daysBetweenNow(dateValue: string | null) {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.ceil((date.getTime() - Date.now()) / 86400000);
+}
+
+function isRecent(dateValue: string, days = 7) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return false;
+  return Date.now() - date.getTime() <= days * 86400000;
+}
+
+function CallItem({ call, onAnalyze }: { call: FundingCall; onAnalyze: (id: string) => void }) {
+  return (
+    <article className="call item">
+      <div>
+        <h3>{call.title}</h3>
+        <p className="muted">{call.summary || "Neanalizat inca."}</p>
+        <div className="badges">
+          {call.source_name && <span className="badge">{call.source_name}</span>}
+          {call.program && <span className="badge">{call.program}</span>}
+          {call.status && <span className="badge warn">{call.status}</span>}
+          {call.budget_text && <span className="badge good">{call.budget_text}</span>}
+          {call.relevance_score !== null && <span className="badge score">Scor {call.relevance_score}/100</span>}
+          {call.deadline_at && <span className="badge danger">Deadline {new Date(call.deadline_at).toLocaleDateString("ro-RO")}</span>}
+        </div>
+        {call.recommendation && <p><strong>Recomandare:</strong> {call.recommendation}</p>}
+        {call.manual_checks?.length ? <p className="muted"><strong>De verificat manual:</strong> {call.manual_checks.join("; ")}</p> : null}
+      </div>
+      <div className="actions">
+        <Link className="button secondary" href={`/calls/${call.id}`}>Detalii</Link>
+        <a className="button secondary" href={call.source_url} target="_blank" rel="noreferrer">Sursa</a>
+        <button className="button" onClick={() => onAnalyze(call.id)}>Analizeaza</button>
+      </div>
+    </article>
+  );
+}
+
+function CategorySection({ title, calls, empty, onAnalyze }: { title: string; calls: FundingCall[]; empty: string; onAnalyze: (id: string) => void }) {
+  return (
+    <section className="panel radar-section">
+      <div className="section-head"><h2>{title}</h2><span className="badge">{calls.length}</span></div>
+      {calls.length === 0 ? <p className="muted">{empty}</p> : <div className="grid">{calls.map((call) => <CallItem key={call.id} call={call} onAnalyze={onAnalyze} />)}</div>}
+    </section>
+  );
 }
 
 export default function HomePage() {
@@ -55,9 +105,7 @@ export default function HomePage() {
     setSyncing(true);
     setMessage("");
     const secret = adminSecret.trim();
-    const path = secret
-      ? `/api/cron/sync-calls?secret=${encodeURIComponent(secret)}`
-      : "/api/cron/sync-calls?manual=1";
+    const path = secret ? `/api/cron/sync-calls?secret=${encodeURIComponent(secret)}` : "/api/cron/sync-calls?manual=1";
     const res = await fetch(path);
     const data = await res.json();
     setMessage(data.message ?? data.error ?? "Sync finalizat.");
@@ -90,6 +138,23 @@ export default function HomePage() {
     });
   }, [calls, query, status]);
 
+  const categories = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => (b.relevance_score ?? -1) - (a.relevance_score ?? -1));
+    const newCalls = sorted.filter((call) => isRecent(call.created_at, 7)).slice(0, 8);
+    const worthReview = sorted.filter((call) => (call.relevance_score ?? 0) >= 65).slice(0, 8);
+    const deadlineSoon = sorted
+      .filter((call) => {
+        const days = daysBetweenNow(call.deadline_at);
+        return days !== null && days >= 0 && days <= 30;
+      })
+      .sort((a, b) => Number(new Date(a.deadline_at ?? 0)) - Number(new Date(b.deadline_at ?? 0)))
+      .slice(0, 8);
+    const modified = sorted
+      .filter((call) => call.updated_at !== call.created_at && isRecent(call.updated_at, 7))
+      .slice(0, 8);
+    return { newCalls, worthReview, deadlineSoon, modified };
+  }, [filtered]);
+
   const statuses = Array.from(new Set(calls.map((call) => call.status).filter(Boolean) as string[]));
   const analyzed = calls.filter((call) => call.relevance_score !== null).length;
   const high = calls.filter((call) => (call.relevance_score ?? 0) >= 75).length;
@@ -117,13 +182,7 @@ export default function HomePage() {
           <h1>Radar apeluri europene</h1>
           <p className="muted">Dashboard pentru apeluri de finantare, analiza AI, scor de relevanta si verificari manuale.</p>
           <div className="toolbar">
-            <input
-              className="input secret-input"
-              placeholder="CRON_SECRET pentru sync manual"
-              type="password"
-              value={adminSecret}
-              onChange={(event) => setAdminSecret(event.target.value)}
-            />
+            <input className="input secret-input" placeholder="CRON_SECRET pentru sync manual" type="password" value={adminSecret} onChange={(event) => setAdminSecret(event.target.value)} />
             <button className="button" onClick={runSync} disabled={syncing}>{syncing ? "Sincronizez..." : "Ruleaza sync"}</button>
             <button className="button secondary" onClick={loadCalls}>Refresh</button>
             <button className="button secondary" onClick={exportCsv} disabled={filtered.length === 0}>Export CSV</button>
@@ -139,8 +198,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="panel">
-        <h2>Apeluri</h2>
+      <section className="panel filters-panel">
+        <h2>Filtre</h2>
         <div className="toolbar">
           <input className="input" placeholder="Cauta program, eligibilitate, digitalizare..." value={query} onChange={(event) => setQuery(event.target.value)} />
           <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -152,35 +211,16 @@ export default function HomePage() {
             {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
           </select>
         </div>
-
-        {loading ? <p className="muted">Incarc apelurile.</p> : filtered.length === 0 ? <p className="muted">Nu exista apeluri inca. Ruleaza sync.</p> : (
-          <div className="grid">
-            {filtered.map((call) => (
-              <article className="call item" key={call.id}>
-                <div>
-                  <h3>{call.title}</h3>
-                  <p className="muted">{call.summary || "Neanalizat inca."}</p>
-                  <div className="badges">
-                    {call.source_name && <span className="badge">{call.source_name}</span>}
-                    {call.program && <span className="badge">{call.program}</span>}
-                    {call.status && <span className="badge warn">{call.status}</span>}
-                    {call.budget_text && <span className="badge good">{call.budget_text}</span>}
-                    {call.relevance_score !== null && <span className="badge score">Scor {call.relevance_score}/100</span>}
-                    {call.deadline_at && <span className="badge danger">Deadline {new Date(call.deadline_at).toLocaleDateString("ro-RO")}</span>}
-                  </div>
-                  {call.recommendation && <p><strong>Recomandare:</strong> {call.recommendation}</p>}
-                  {call.manual_checks?.length ? <p className="muted"><strong>De verificat manual:</strong> {call.manual_checks.join("; ")}</p> : null}
-                </div>
-                <div className="actions">
-                  <Link className="button secondary" href={`/calls/${call.id}`}>Detalii</Link>
-                  <a className="button secondary" href={call.source_url} target="_blank" rel="noreferrer">Sursa</a>
-                  <button className="button" onClick={() => analyze(call.id)}>Analizeaza</button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
       </section>
+
+      {loading ? <section className="panel"><p className="muted">Incarc apelurile.</p></section> : (
+        <section className="radar-grid">
+          <CategorySection title="Nou aparute" calls={categories.newCalls} empty="Nu exista apeluri noi in ultimele 7 zile." onAnalyze={analyze} />
+          <CategorySection title="Merita analizate" calls={categories.worthReview} empty="Nu exista apeluri cu scor de minimum 65." onAnalyze={analyze} />
+          <CategorySection title="Deadline apropiat" calls={categories.deadlineSoon} empty="Nu exista deadline-uri in urmatoarele 30 de zile." onAnalyze={analyze} />
+          <CategorySection title="Modificate" calls={categories.modified} empty="Nu exista apeluri modificate recent." onAnalyze={analyze} />
+        </section>
+      )}
     </main>
   );
 }
