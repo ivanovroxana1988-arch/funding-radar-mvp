@@ -72,8 +72,8 @@ function normalizeTitle(title: string) {
   return title.replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
-export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedLink[]> {
-  const res = await fetch(source.url, {
+async function fetchHtml(url: string) {
+  const res = await fetch(url, {
     headers: {
       "user-agent": "FundingRadarBot/0.1 (+internal research assistant)",
       accept: "text/html,application/xhtml+xml",
@@ -82,10 +82,48 @@ export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedL
   });
 
   if (!res.ok) {
-    throw new Error(`Source fetch failed: ${source.url} ${res.status}`);
+    throw new Error(`Source fetch failed: ${url} ${res.status}`);
   }
 
-  const html = await res.text();
+  return res.text();
+}
+
+export async function fetchDocumentLinksFromPage(pageUrl: string, sourceName: string): Promise<ExtractedLink[]> {
+  const html = await fetchHtml(pageUrl);
+  const $ = cheerio.load(html);
+  const documents: ExtractedLink[] = [];
+
+  $("a").each((_, element) => {
+    const rawHref = $(element).attr("href");
+    if (!rawHref) return;
+
+    const url = absoluteUrl(rawHref, pageUrl);
+    if (!url) return;
+
+    const documentType = inferDocumentType(url);
+    if (!documentType) return;
+
+    const title = normalizeTitle($(element).text()) || url.split("/").pop() || url;
+    documents.push({
+      title,
+      url,
+      sourceName,
+      documentType,
+      status: inferStatus(title),
+    });
+  });
+
+  const unique = new Map<string, ExtractedLink>();
+  for (const document of documents) {
+    const key = document.url.toLowerCase().replace(/\/$/, "");
+    if (!unique.has(key)) unique.set(key, document);
+  }
+
+  return Array.from(unique.values()).slice(0, 20);
+}
+
+export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedLink[]> {
+  const html = await fetchHtml(source.url);
   const $ = cheerio.load(html);
   const links: ExtractedLink[] = [];
 
