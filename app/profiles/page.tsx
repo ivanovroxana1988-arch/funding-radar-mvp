@@ -41,6 +41,7 @@ export default function ProfilesPage() {
   const [themes, setThemes] = useState<string[]>(templates[0].themes);
   const [freeText, setFreeText] = useState("Caut apeluri unde pot fi solicitant, partener sau beneficiar indirect. Marcheaza clar incertitudinile de eligibilitate.");
   const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   async function loadProfiles() {
     const res = await fetch("/api/profiles", { cache: "no-store" });
@@ -56,6 +57,7 @@ export default function ProfilesPage() {
     setName(template.name);
     setDescription(template.description);
     setThemes(template.themes);
+    setMessage("");
   }
 
   function toggleTheme(theme: string) {
@@ -65,18 +67,28 @@ export default function ProfilesPage() {
   async function createProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
-    const res = await fetch("/api/profiles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, profile_prompt: profilePrompt }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setMessage(data.error ?? "Profilul nu a putut fi creat.");
-      return;
+    setIsSaving(true);
+
+    try {
+      const res = await fetch("/api/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description, profile_prompt: profilePrompt }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setMessage(data.error ?? "Profilul nu a putut fi salvat.");
+        return;
+      }
+
+      setMessage(data.message ?? "Profil salvat.");
+      await loadProfiles();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Profilul nu a putut fi salvat.");
+    } finally {
+      setIsSaving(false);
     }
-    setMessage("Profil creat.");
-    await loadProfiles();
   }
 
   useEffect(() => {
@@ -108,7 +120,7 @@ export default function ProfilesPage() {
           </div>
           <label>Descriere libera<textarea className="textarea" value={freeText} onChange={(event) => setFreeText(event.target.value)} required /></label>
           <label>Prompt generat<textarea className="textarea prompt-preview" value={profilePrompt} readOnly /></label>
-          <button className="button" type="submit">Creeaza profil</button>
+          <button className="button" type="submit" disabled={isSaving}>{isSaving ? "Salvez..." : "Salveaza profil"}</button>
           {message && <p className="notice">{message}</p>}
         </form>
 
