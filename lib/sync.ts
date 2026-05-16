@@ -2,7 +2,8 @@ import { analyzeFundingCall } from "./analyze";
 import { extractReadableTextFromUrl } from "./documentText";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 import { SOURCES } from "./sources";
-import { fetchSourceLinks } from "./scrape";
+import { fetchDocumentLinksFromPage, fetchSourceLinks } from "./scrape";
+import type { ExtractedLink } from "./types";
 
 function fingerprint(url: string) {
   return Buffer.from(url.toLowerCase().replace(/\/$/, "")).toString("base64url").slice(0, 180);
@@ -54,6 +55,32 @@ async function saveDocumentText(input: {
   );
 
   if (error) throw error;
+}
+
+async function saveDocumentsForCall(input: {
+  supabase: ReturnType<typeof getSupabaseAdmin>;
+  callId: string;
+  link: ExtractedLink;
+  remainingLimit: number;
+}) {
+  const documents = input.link.documentType
+    ? [input.link]
+    : await fetchDocumentLinksFromPage(input.link.url, input.link.sourceName).catch(() => []);
+
+  let saved = 0;
+  for (const document of documents.slice(0, input.remainingLimit)) {
+    if (!document.documentType) continue;
+    await saveDocumentText({
+      supabase: input.supabase,
+      callId: input.callId,
+      title: document.title,
+      url: document.url,
+      documentType: document.documentType,
+    });
+    saved++;
+  }
+
+  return saved;
 }
 
 async function analyzeCallForProfiles(input: {
@@ -239,16 +266,15 @@ export async function syncAllSources() {
           if (!existing.analyzed_at) candidateIds.add(existing.id);
         }
 
-        if (callId && link.documentType && documentsForSource < documentLimit) {
-          await saveDocumentText({
+        if (callId && documentsForSource < documentLimit) {
+          const saved = await saveDocumentsForCall({
             supabase,
             callId,
-            title: link.title,
-            url: link.url,
-            documentType: link.documentType,
+            link,
+            remainingLimit: documentLimit - documentsForSource,
           });
-          documentsForSource++;
-          documentsSaved++;
+          documentsForSource += saved;
+          documentsSaved += saved;
         }
       }
 
