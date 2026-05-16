@@ -63,6 +63,16 @@ export default function MatchesPage() {
     await loadMatches(selectedIdea);
   }
 
+  async function saveCall(callId: string) {
+    const res = await fetch("/api/saved-calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ call_id: callId, project_idea_id: selectedIdea || null }),
+    });
+    const data = await res.json();
+    setMessage(data.message ?? data.error ?? "Apel salvat.");
+  }
+
   useEffect(() => {
     loadIdeas();
   }, []);
@@ -115,7 +125,7 @@ export default function MatchesPage() {
                     <div className="actions start">
                       <Link className="button secondary" href={`/calls/${call.id}`}>Analiza apel</Link>
                       <a className="button secondary" href={call.source_url} target="_blank" rel="noreferrer">Sursa oficiala</a>
-                      <button className="button">Salveaza pentru analiza</button>
+                      <button className="button" onClick={() => saveCall(call.id)}>Salveaza pentru analiza</button>
                     </div>
                   </div>
                 </article>
