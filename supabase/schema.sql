@@ -61,11 +61,27 @@ create table if not exists funding_profiles (
 );
 
 insert into funding_profiles (name, description, profile_prompt)
-values (
-  'Concordia / piata muncii / digitalizare',
-  'Profil initial pentru organizatie patronala, piata muncii, competente, digitalizare si tranzitie verde.',
-  'Cauta apeluri relevante pentru organizatii patronale, parteneri sociali, piata muncii, ocupare, formare profesionala, competente digitale, digitalizare, AI, tranzitie verde, cercetare, capacitate institutionala si parteneriate.'
-)
+values
+  (
+    'Concordia / partener social / piata muncii',
+    'Ocupare, formare, competente, dialog social, legislatia muncii, digitalizare pentru organizatii patronale.',
+    'Cauta apeluri relevante pentru organizatii patronale, parteneri sociali, piata muncii, ocupare, formare profesionala, competente, dialog social, capacitate institutionala, digitalizare si parteneriate. Scor mare doar daca solicitantul sau partenerul poate fi organizatie patronala/partener social.'
+  ),
+  (
+    'Digitalizare / AI / aplicatii interne',
+    'Proiecte software, automatizare, AI, date, transformare digitala, competente digitale.',
+    'Cauta apeluri relevante pentru dezvoltare software, digitalizare, AI, date, automatizare, transformare digitala, competente digitale, inovare si aplicatii interne pentru organizatii sau IMM-uri.'
+  ),
+  (
+    'Lucindra / inovare / wellbeing / AI',
+    'Startup, cercetare, educatie, sanatate mintala non-clinica, AI companion, neurodivergenta.',
+    'Cauta apeluri relevante pentru startup, cercetare, inovare, educatie, wellbeing, sanatate mintala non-clinica, AI companion, neurodivergenta, instrumente digitale si impact social.'
+  ),
+  (
+    'Dragoslavele / turism rural / comunitate / patrimoniu',
+    'Casa veche, turism rural, GAL, economie rurala, patrimoniu, regenerare comunitara.',
+    'Cauta apeluri relevante pentru turism rural, patrimoniu, dezvoltare locala, GAL, comunitate, economie rurala, sustenabilitate, experiente culturale si regenerare comunitara.'
+  )
 on conflict (name) do nothing;
 
 create table if not exists project_ideas (
@@ -101,6 +117,17 @@ create table if not exists funding_matches (
 
 create unique index if not exists funding_matches_call_profile_key on funding_matches(call_id, profile_id);
 create unique index if not exists funding_matches_call_project_idea_key on funding_matches(call_id, project_idea_id);
+
+create table if not exists saved_funding_calls (
+  id uuid primary key default gen_random_uuid(),
+  call_id uuid references funding_calls(id) on delete cascade,
+  project_idea_id uuid references project_ideas(id) on delete set null,
+  note text,
+  created_at timestamptz default now(),
+  unique(call_id, project_idea_id)
+);
+
+create index if not exists saved_funding_calls_project_idea_id_idx on saved_funding_calls(project_idea_id);
 
 create table if not exists sync_runs (
   id uuid primary key default gen_random_uuid(),
