@@ -70,7 +70,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const projectIdeaId = body.project_idea_id;
-  const limit = Math.min(Number(body.limit) || envInt("MATCH_ANALYZE_LIMIT", 20), 50);
+  const defaultLimit = envInt("MATCH_ANALYZE_LIMIT", 80);
+  const maxLimit = envInt("MATCH_ANALYZE_MAX_LIMIT", 200);
+  const requestedLimit = Number(body.limit) || defaultLimit;
+  const limit = Math.max(1, Math.min(requestedLimit, maxLimit));
 
   if (!projectIdeaId || typeof projectIdeaId !== "string") {
     return NextResponse.json({ error: "Missing project_idea_id." }, { status: 400 });
@@ -140,7 +143,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({
-    message: `Potriviri calculate pentru ${processed} apeluri.`,
+    message: `Potriviri calculate pentru ${processed} apeluri (limita folosita: ${limit}).`,
     processed,
     errors,
   });

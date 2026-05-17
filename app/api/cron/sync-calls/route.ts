@@ -10,7 +10,14 @@ function isAuthorized(request: Request) {
   const manual = url.searchParams.get("manual");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (manual === "1") return true;
+  if (manual === "1") {
+    const manualSecret = process.env.MANUAL_SYNC_SECRET || cronSecret;
+    if (!manualSecret) return false;
+
+    const manualToken = url.searchParams.get("token");
+    const auth = request.headers.get("authorization");
+    return manualToken === manualSecret || auth === `Bearer ${manualSecret}`;
+  }
   if (!cronSecret) return false;
   if (secret === cronSecret) return true;
 
