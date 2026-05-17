@@ -4,6 +4,7 @@ export const SOURCES: SourceConfig[] = [
   {
     name: "MIPE - Calendar apeluri de finantare",
     url: "https://mfe.gov.ro/calendar-apeluri-de-finantare/",
+    fallbackUrls: ["https://mfe.gov.ro/wp-sitemap.xml", "https://mfe.gov.ro/wp-json/wp/v2/posts?search=apel&_fields=link,title&per_page=100"],
     type: "html",
     enabled: true,
   },
@@ -64,6 +65,7 @@ export const SOURCES: SourceConfig[] = [
   {
     name: "Oportunitati UE",
     url: "https://oportunitati-ue.gov.ro/",
+    fallbackUrls: ["https://oportunitati-ue.gov.ro/wp-sitemap.xml", "https://oportunitati-ue.gov.ro/wp-json/wp/v2/posts?search=apel&_fields=link,title&per_page=100"],
     type: "html",
     enabled: true,
   },

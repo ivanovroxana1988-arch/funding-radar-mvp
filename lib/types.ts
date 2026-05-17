@@ -4,6 +4,7 @@ export type SourceConfig = {
   type: "html" | "calendar" | "manual";
   enabled: boolean;
   programHint?: string;
+  fallbackUrls?: string[];
 };
 
 export type ExtractedLink = {
