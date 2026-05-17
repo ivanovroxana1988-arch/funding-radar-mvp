@@ -1,6 +1,5 @@
 import * as cheerio from "cheerio";
-import type { CheerioAPI } from "cheerio";
-import type { AnyNode } from "domhandler";
+import type { CheerioAPI, AnyNode } from "cheerio";
 import type { ExtractedLink, SourceConfig } from "./types";
 
 const DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv"];
