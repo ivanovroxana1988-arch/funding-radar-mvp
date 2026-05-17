@@ -49,6 +49,11 @@ function buildRequestAttempts(url: string) {
   return direct;
 }
 
+
+function buildRequestUrls(url: string) {
+  return buildRequestAttempts(url);
+}
+
 function isWafLikeStatus(status: number) {
   return status === 403 || status === 406 || status === 429 || status === 503;
 }
@@ -150,10 +155,10 @@ function bestLinkTitle($: CheerioAPI, element: AnyNode, url: string) {
   return candidates[0] ?? titleFromUrl(url);
 }
 
-async function fetchTextWithFallback(url: string) {
+async function fetchTextWithFallback(input: string | string[]) {
   const timeoutMs = envInt("SOURCE_FETCH_TIMEOUT_MS", DEFAULT_FETCH_TIMEOUT_MS);
   const errors: string[] = [];
-  const attempts = buildRequestAttempts(url);
+  const attempts = Array.isArray(input) ? input : buildRequestAttempts(input);
   const userAgents = parseUserAgents();
 
   for (const attemptUrl of attempts) {
@@ -249,7 +254,7 @@ async function discoverMfeLinks(source: SourceConfig) {
 
   for (const candidate of [source.url, ...Array.from(discoveryUrls)]) {
     try {
-      const { body, requestUrl } = await fetchTextWithFallback(candidate);
+      const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(candidate));
       if (candidate.includes("/wp-json/")) {
         const discovered = extractFromWordPressJson(body, source);
         for (const link of discovered) {
@@ -288,7 +293,7 @@ async function discoverMfeLinks(source: SourceConfig) {
 }
 
 export async function fetchDocumentLinksFromPage(pageUrl: string, sourceName: string): Promise<ExtractedLink[]> {
-  const { body, requestUrl } = await fetchTextWithFallback(pageUrl);
+  const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(pageUrl));
   const links = extractFromHtml(body, { name: sourceName, url: pageUrl, type: "html", enabled: true }, requestUrl).filter((item) => Boolean(item.documentType));
   return dedupeLinks(links).slice(0, 20);
 }
@@ -304,7 +309,7 @@ export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedL
   const errors: string[] = [];
   for (const candidate of candidates) {
     try {
-      const { body, requestUrl } = await fetchTextWithFallback(candidate);
+      const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(candidate));
       const links = candidate.includes("/wp-json/") ? extractFromWordPressJson(body, source) : candidate.endsWith(".xml") || body.includes("<urlset") ? extractFromSitemapXml(body, source) : extractFromHtml(body, source, requestUrl);
       const deduped = dedupeLinks(links).slice(0, 120);
       if (deduped.length > 0) return deduped;
