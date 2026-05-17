@@ -155,10 +155,16 @@ function bestLinkTitle($: CheerioAPI, element: AnyNode, url: string) {
   return candidates[0] ?? titleFromUrl(url);
 }
 
+function normalizeFetchAttempts(input: string | string[]) {
+  return Array.isArray(input) ? input : buildRequestAttempts(input);
+}
+
+async function fetchTextWithFallback(url: string): Promise<{ body: string; requestUrl: string }>;
+async function fetchTextWithFallback(urls: string[]): Promise<{ body: string; requestUrl: string }>;
 async function fetchTextWithFallback(input: string | string[]) {
   const timeoutMs = envInt("SOURCE_FETCH_TIMEOUT_MS", DEFAULT_FETCH_TIMEOUT_MS);
   const errors: string[] = [];
-  const attempts = Array.isArray(input) ? input : buildRequestAttempts(input);
+  const attempts = normalizeFetchAttempts(input);
   const userAgents = parseUserAgents();
 
   for (const attemptUrl of attempts) {
