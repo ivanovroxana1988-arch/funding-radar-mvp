@@ -32,18 +32,20 @@ Apoi completează `.env.local` cu:
 
 Atenție: `SUPABASE_SERVICE_ROLE_KEY` nu se pune niciodată în client. Rămâne doar în server/API routes. Da, știu, pare evident, până când cineva o pune în frontend și internetul aplaudă cu flăcări.
 
-## 3. Rulează sync manual
+## 3. Sync automat
 
-După ce pornești aplicația:
+Sincronizarea rulează automat din Vercel Cron pe endpointul `/api/cron/sync-calls` conform programului din `vercel.json`.
 
-```bash
-curl "http://localhost:3000/api/cron/sync-calls?secret=dev-secret"
-```
-
-În `.env.local`, setează:
+În `.env.local` (și în Vercel env), setează:
 
 ```env
 CRON_SECRET=dev-secret
+```
+
+Pentru test local poți simula apelul cron:
+
+```bash
+curl "http://localhost:3000/api/cron/sync-calls?secret=dev-secret"
 ```
 
 ## 4. Analizează un apel
