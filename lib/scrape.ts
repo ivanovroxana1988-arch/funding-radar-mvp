@@ -5,6 +5,67 @@ import type { ExtractedLink, SourceConfig } from "./types";
 
 const DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv"];
 const DEFAULT_FETCH_TIMEOUT_MS = 15000;
+const MFE_DISCOVERY_TERMS = [
+  "apel",
+  "apeluri",
+  "ghid",
+  "finantare",
+  "finanțare",
+  "proiecte",
+  "lansare",
+  "consultare",
+  "calendar",
+  "peo",
+  "podd",
+  "ptj",
+  "pids",
+  "pocid",
+  "programul sanatate",
+];
+
+const DEFAULT_USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
+];
+
+function parseUserAgents() {
+  const configured = process.env.SOURCE_USER_AGENTS?.trim();
+  if (!configured) return DEFAULT_USER_AGENTS;
+  return configured
+    .split("||")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildRequestAttempts(url: string) {
+  const direct = [url];
+  const proxyPrefix = process.env.SOURCE_PROXY_PREFIX?.trim();
+  const browserPrefix = process.env.SOURCE_BROWSER_RENDERER_PREFIX?.trim();
+
+  if (proxyPrefix) direct.push(`${proxyPrefix}${encodeURIComponent(url)}`);
+  if (browserPrefix) direct.push(`${browserPrefix}${encodeURIComponent(url)}`);
+
+  return direct;
+}
+
+function isWafLikeStatus(status: number) {
+  return status === 403 || status === 406 || status === 429 || status === 503;
+}
+
+function buildHeaders(userAgent: string) {
+  return {
+    "user-agent": `${userAgent} FundingRadar/0.1`,
+    accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
+    "accept-language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
+    "cache-control": "no-cache",
+    pragma: "no-cache",
+    "sec-fetch-dest": "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": "none",
+    "upgrade-insecure-requests": "1",
+  };
+}
 
 function absoluteUrl(href: string, base: string) {
   try {
@@ -40,49 +101,8 @@ export function inferDocumentType(url: string) {
 
 export function looksLikeFundingCall(text: string, href: string) {
   const haystack = normalizeForMatch(`${text} ${href}`);
-
-  const positive = [
-    "apel",
-    "ghid",
-    "finantare",
-    "finantari",
-    "proiecte",
-    "consultare",
-    "lansat",
-    "lansare",
-    "calendar",
-    "peo",
-    "podd",
-    "pos",
-    "ptj",
-    "por",
-    "pids",
-    "program",
-    "mysmis",
-    "grant",
-    "fonduri",
-    "cerere de finantare",
-    ".pdf",
-    ".docx",
-    ".xlsx",
-  ];
-
-  const negative = [
-    "facebook",
-    "twitter",
-    "x.com",
-    "linkedin",
-    "youtube",
-    "instagram",
-    "privacy",
-    "cookie",
-    "contact",
-    "wp-content/uploads/logo",
-    "javascript:",
-    "mailto:",
-    "tel:",
-  ];
-
+  const positive = ["apel", "ghid", "finantare", "finantari", "proiecte", "consultare", "lansat", "lansare", "calendar", "peo", "podd", "pos", "ptj", "por", "pids", "program", "mysmis", "grant", "fonduri", "cerere de finantare", ".pdf", ".docx", ".xlsx"];
+  const negative = ["facebook", "twitter", "x.com", "linkedin", "youtube", "instagram", "privacy", "cookie", "contact", "wp-content/uploads/logo", "javascript:", "mailto:", "tel:"];
   return positive.some((word) => haystack.includes(word)) && !negative.some((word) => haystack.includes(word));
 }
 
@@ -101,163 +121,197 @@ function normalizeTitle(title: string) {
   return title.replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
-function isGenericLinkTitle(title: string) {
-  const t = normalizeForMatch(title);
-  return [
-    "citeste mai mult",
-    "citeste mai departe",
-    "mai mult",
-    "detalii",
-    "vezi detalii",
-    "read more",
-    "download",
-    "descarca",
-  ].includes(t);
-}
-
 function titleFromUrl(url: string) {
   try {
     const parsed = new URL(url);
     const last = parsed.pathname.split("/").filter(Boolean).pop() ?? "";
-    return normalizeTitle(
-      decodeURIComponent(last)
-        .replace(/\.[a-z0-9]+$/i, "")
-        .replace(/[-_]+/g, " ")
-    );
+    return normalizeTitle(decodeURIComponent(last).replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " "));
   } catch {
     return "";
   }
 }
 
 function nearbyTitle($: CheerioAPI, element: AnyNode) {
-  const container = $(element).closest(
-    "article, li, tr, .card, .post, .entry, .elementor-post, .wp-block-post, .vc_grid-item, .item, .news-item, .post-item"
-  );
-
-  const heading = normalizeTitle(
-    container.find("h1, h2, h3, h4, h5, .entry-title, .post-title, .title, .card-title").first().text()
-  );
-
+  const container = $(element).closest("article, li, tr, .card, .post, .entry, .elementor-post, .wp-block-post, .vc_grid-item, .item, .news-item, .post-item");
+  const heading = normalizeTitle(container.find("h1, h2, h3, h4, h5, .entry-title, .post-title, .title, .card-title").first().text());
   if (heading) return heading;
-
   const rowText = normalizeTitle(container.text());
   return rowText.length >= 12 ? rowText : "";
 }
 
 function bestLinkTitle($: CheerioAPI, element: AnyNode, url: string) {
-  const rawText = normalizeTitle($(element).text());
-  const aria = normalizeTitle($(element).attr("aria-label") ?? "");
-  const titleAttr = normalizeTitle($(element).attr("title") ?? "");
-  const urlTitle = titleFromUrl(url);
-  const neighbor = nearbyTitle($, element);
-
-  const candidates = [rawText, aria, titleAttr, neighbor, urlTitle]
-    .map(normalizeTitle)
-    .filter(Boolean)
-    .filter((item) => !isGenericLinkTitle(item));
-
-  return candidates[0] ?? rawText ?? urlTitle;
+  const candidates = [
+    normalizeTitle($(element).text()),
+    normalizeTitle($(element).attr("aria-label") ?? ""),
+    normalizeTitle($(element).attr("title") ?? ""),
+    nearbyTitle($, element),
+    titleFromUrl(url),
+  ].filter(Boolean);
+  return candidates[0] ?? titleFromUrl(url);
 }
 
-async function fetchHtml(url: string) {
+async function fetchTextWithFallback(url: string) {
   const timeoutMs = envInt("SOURCE_FETCH_TIMEOUT_MS", DEFAULT_FETCH_TIMEOUT_MS);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const errors: string[] = [];
+  const attempts = buildRequestAttempts(url);
+  const userAgents = parseUserAgents();
 
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 FundingRadar/0.1",
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "accept-language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
-      },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Source fetch failed: ${url} ${res.status}`);
+  for (const attemptUrl of attempts) {
+    for (const userAgent of userAgents) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(attemptUrl, {
+          headers: buildHeaders(userAgent),
+          cache: "no-store",
+          redirect: "follow",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          errors.push(`Source fetch failed: ${attemptUrl} ${res.status}`);
+          if (!isWafLikeStatus(res.status)) break;
+          continue;
+        }
+        return { body: await res.text(), requestUrl: attemptUrl };
+      } catch (err) {
+        errors.push(err instanceof Error && err.name === "AbortError" ? `Source fetch timed out after ${timeoutMs}ms: ${attemptUrl}` : err instanceof Error ? err.message : String(err));
+      } finally {
+        clearTimeout(timeout);
+      }
     }
-
-    return res.text();
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Source fetch timed out after ${timeoutMs}ms: ${url}`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-export async function fetchDocumentLinksFromPage(pageUrl: string, sourceName: string): Promise<ExtractedLink[]> {
-  const html = await fetchHtml(pageUrl);
-  const $ = cheerio.load(html);
-  const documents: ExtractedLink[] = [];
-
-  $("a").each((_, element) => {
-    const rawHref = $(element).attr("href");
-    if (!rawHref) return;
-
-    const url = absoluteUrl(rawHref, pageUrl);
-    if (!url) return;
-
-    const documentType = inferDocumentType(url);
-    if (!documentType) return;
-
-    const title = bestLinkTitle($, element, url) || url.split("/").pop() || url;
-    documents.push({
-      title,
-      url,
-      sourceName,
-      documentType,
-      status: inferStatus(title),
-    });
-  });
-
-  const unique = new Map<string, ExtractedLink>();
-  for (const document of documents) {
-    const key = document.url.toLowerCase().replace(/\/$/, "");
-    if (!unique.has(key)) unique.set(key, document);
   }
 
-  return Array.from(unique.values()).slice(0, 20);
+  throw new Error(errors.join(" | "));
 }
 
-export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedLink[]> {
-  const html = await fetchHtml(source.url);
-  const $ = cheerio.load(html);
-  const links: ExtractedLink[] = [];
-
-  $("a").each((_, element) => {
-    const rawHref = $(element).attr("href");
-    if (!rawHref) return;
-
-    const url = absoluteUrl(rawHref, source.url);
-    if (!url) return;
-
-    const documentType = inferDocumentType(url);
-    const title = bestLinkTitle($, element, url);
-
-    if (!title || (!documentType && title.length < 8)) return;
-    if (!looksLikeFundingCall(title, url)) return;
-
-    links.push({
-      title,
-      url,
-      sourceName: source.name,
-      programHint: source.programHint ?? null,
-      status: inferStatus(title),
-      documentType,
-    });
-  });
-
+function dedupeLinks(links: ExtractedLink[]) {
   const unique = new Map<string, ExtractedLink>();
   for (const link of links) {
     const key = link.url.toLowerCase().replace(/\/$/, "");
     if (!unique.has(key)) unique.set(key, link);
   }
+  return Array.from(unique.values());
+}
 
-  return Array.from(unique.values()).slice(0, 120);
+function extractFromHtml(raw: string, source: SourceConfig, baseUrl: string): ExtractedLink[] {
+  const $ = cheerio.load(raw);
+  const links: ExtractedLink[] = [];
+  $("a").each((_, element) => {
+    const rawHref = $(element).attr("href");
+    if (!rawHref) return;
+    const url = absoluteUrl(rawHref, baseUrl);
+    if (!url) return;
+    const title = bestLinkTitle($, element, url);
+    const documentType = inferDocumentType(url);
+    if (!title || (!documentType && title.length < 8)) return;
+    if (!looksLikeFundingCall(title, url)) return;
+    links.push({ title, url, sourceName: source.name, programHint: source.programHint ?? null, status: inferStatus(title), documentType });
+  });
+  return links;
+}
+
+function extractFromWordPressJson(raw: string, source: SourceConfig) {
+  const data = JSON.parse(raw) as Array<{ link?: string; title?: { rendered?: string } | string; url?: string }>;
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((item) => {
+      const url = item.link ?? item.url ?? "";
+      const titleValue = typeof item.title === "string" ? item.title : item.title?.rendered ?? "";
+      const title = normalizeTitle(titleValue || titleFromUrl(url));
+      return { title, url };
+    })
+    .filter((item) => item.url && item.title && looksLikeFundingCall(item.title, item.url))
+    .map((item) => ({ title: item.title, url: item.url, sourceName: source.name, programHint: source.programHint ?? null, status: inferStatus(item.title), documentType: inferDocumentType(item.url) }));
+}
+
+function extractFromSitemapXml(raw: string, source: SourceConfig) {
+  const $ = cheerio.load(raw, { xmlMode: true });
+  const links: ExtractedLink[] = [];
+  $("url > loc").each((_, element) => {
+    const url = normalizeTitle($(element).text());
+    const title = normalizeTitle(titleFromUrl(url));
+    if (!url || !looksLikeFundingCall(title, url)) return;
+    links.push({ title: title || url, url, sourceName: source.name, programHint: source.programHint ?? null, status: inferStatus(title), documentType: inferDocumentType(url) });
+  });
+  return links;
+}
+
+async function discoverMfeLinks(source: SourceConfig) {
+  const discoveryUrls = new Set<string>(source.fallbackUrls ?? []);
+  for (const term of MFE_DISCOVERY_TERMS) {
+    discoveryUrls.add(`https://mfe.gov.ro/wp-json/wp/v2/search?search=${encodeURIComponent(term)}&per_page=100`);
+    discoveryUrls.add(`https://mfe.gov.ro/wp-json/wp/v2/pages?search=${encodeURIComponent(term)}&_fields=link,title&per_page=100`);
+    discoveryUrls.add(`https://mfe.gov.ro/wp-json/wp/v2/posts?search=${encodeURIComponent(term)}&_fields=link,title&per_page=100`);
+  }
+
+  const pageCandidates = new Set<string>();
+  const links: ExtractedLink[] = [];
+
+  for (const candidate of [source.url, ...Array.from(discoveryUrls)]) {
+    try {
+      const { body, requestUrl } = await fetchTextWithFallback(candidate);
+      if (candidate.includes("/wp-json/")) {
+        const discovered = extractFromWordPressJson(body, source);
+        for (const link of discovered) {
+          links.push(link);
+          pageCandidates.add(link.url);
+        }
+        continue;
+      }
+      if (candidate.endsWith(".xml") || body.includes("<urlset")) {
+        const discovered = extractFromSitemapXml(body, source);
+        for (const link of discovered) {
+          links.push(link);
+          pageCandidates.add(link.url);
+        }
+        continue;
+      }
+      for (const link of extractFromHtml(body, source, requestUrl)) {
+        links.push(link);
+        pageCandidates.add(link.url);
+      }
+    } catch {
+      // continue discovery on next candidate
+    }
+  }
+
+  for (const pageUrl of Array.from(pageCandidates).slice(0, 80)) {
+    try {
+      const docs = await fetchDocumentLinksFromPage(pageUrl, `${source.name} documente`);
+      links.push(...docs.map((doc) => ({ ...doc, programHint: doc.programHint ?? source.programHint ?? null })));
+    } catch {
+      // best effort for page-level document discovery
+    }
+  }
+
+  return dedupeLinks(links).slice(0, 250);
+}
+
+export async function fetchDocumentLinksFromPage(pageUrl: string, sourceName: string): Promise<ExtractedLink[]> {
+  const { body, requestUrl } = await fetchTextWithFallback(pageUrl);
+  const links = extractFromHtml(body, { name: sourceName, url: pageUrl, type: "html", enabled: true }, requestUrl).filter((item) => Boolean(item.documentType));
+  return dedupeLinks(links).slice(0, 20);
+}
+
+export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedLink[]> {
+  if (source.type === "discovery") {
+    const discovered = await discoverMfeLinks(source);
+    if (discovered.length > 0) return discovered;
+    throw new Error(`Discovery produced no links for ${source.name}`);
+  }
+
+  const candidates = [source.url, ...(source.fallbackUrls ?? [])];
+  const errors: string[] = [];
+  for (const candidate of candidates) {
+    try {
+      const { body, requestUrl } = await fetchTextWithFallback(candidate);
+      const links = candidate.includes("/wp-json/") ? extractFromWordPressJson(body, source) : candidate.endsWith(".xml") || body.includes("<urlset") ? extractFromSitemapXml(body, source) : extractFromHtml(body, source, requestUrl);
+      const deduped = dedupeLinks(links).slice(0, 120);
+      if (deduped.length > 0) return deduped;
+      errors.push(`No candidate links matched for ${candidate}`);
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+  throw new Error(errors.join(" | "));
 }

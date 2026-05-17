@@ -1,9 +1,10 @@
 export type SourceConfig = {
   name: string;
   url: string;
-  type: "html" | "calendar" | "manual";
+  type: "html" | "calendar" | "manual" | "discovery";
   enabled: boolean;
   programHint?: string;
+  fallbackUrls?: string[];
 };
 
 export type ExtractedLink = {
