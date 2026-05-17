@@ -5,6 +5,23 @@ import type { ExtractedLink, SourceConfig } from "./types";
 
 const DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv"];
 const DEFAULT_FETCH_TIMEOUT_MS = 15000;
+const MFE_DISCOVERY_TERMS = [
+  "apel",
+  "apeluri",
+  "ghid",
+  "finantare",
+  "finanțare",
+  "proiecte",
+  "lansare",
+  "consultare",
+  "calendar",
+  "peo",
+  "podd",
+  "ptj",
+  "pids",
+  "pocid",
+  "programul sanatate",
+];
 
 function absoluteUrl(href: string, base: string) {
   try {
@@ -40,11 +57,8 @@ export function inferDocumentType(url: string) {
 
 export function looksLikeFundingCall(text: string, href: string) {
   const haystack = normalizeForMatch(`${text} ${href}`);
-
   const positive = ["apel", "ghid", "finantare", "finantari", "proiecte", "consultare", "lansat", "lansare", "calendar", "peo", "podd", "pos", "ptj", "por", "pids", "program", "mysmis", "grant", "fonduri", "cerere de finantare", ".pdf", ".docx", ".xlsx"];
-
   const negative = ["facebook", "twitter", "x.com", "linkedin", "youtube", "instagram", "privacy", "cookie", "contact", "wp-content/uploads/logo", "javascript:", "mailto:", "tel:"];
-
   return positive.some((word) => haystack.includes(word)) && !negative.some((word) => haystack.includes(word));
 }
 
@@ -61,11 +75,6 @@ export function inferStatus(title: string) {
 
 function normalizeTitle(title: string) {
   return title.replace(/\s+/g, " ").trim().slice(0, 500);
-}
-
-function isGenericLinkTitle(title: string) {
-  const t = normalizeForMatch(title);
-  return ["citeste mai mult", "citeste mai departe", "mai mult", "detalii", "vezi detalii", "read more", "download", "descarca"].includes(t);
 }
 
 function titleFromUrl(url: string) {
@@ -87,21 +96,20 @@ function nearbyTitle($: CheerioAPI, element: AnyNode) {
 }
 
 function bestLinkTitle($: CheerioAPI, element: AnyNode, url: string) {
-  const rawText = normalizeTitle($(element).text());
-  const aria = normalizeTitle($(element).attr("aria-label") ?? "");
-  const titleAttr = normalizeTitle($(element).attr("title") ?? "");
-  const urlTitle = titleFromUrl(url);
-  const neighbor = nearbyTitle($, element);
-
-  const candidates = [rawText, aria, titleAttr, neighbor, urlTitle].map(normalizeTitle).filter(Boolean).filter((item) => !isGenericLinkTitle(item));
-  return candidates[0] ?? rawText ?? urlTitle;
+  const candidates = [
+    normalizeTitle($(element).text()),
+    normalizeTitle($(element).attr("aria-label") ?? ""),
+    normalizeTitle($(element).attr("title") ?? ""),
+    nearbyTitle($, element),
+    titleFromUrl(url),
+  ].filter(Boolean);
+  return candidates[0] ?? titleFromUrl(url);
 }
 
 function buildRequestUrls(url: string) {
   const proxyPrefix = process.env.SOURCE_PROXY_PREFIX?.trim();
   if (!proxyPrefix) return [url];
-  const encoded = `${proxyPrefix}${encodeURIComponent(url)}`;
-  return [url, encoded];
+  return [url, `${proxyPrefix}${encodeURIComponent(url)}`];
 }
 
 async function fetchTextWithFallback(urls: string[]) {
@@ -111,7 +119,6 @@ async function fetchTextWithFallback(urls: string[]) {
   for (const url of urls) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
     try {
       const res = await fetch(url, {
         headers: {
@@ -122,68 +129,19 @@ async function fetchTextWithFallback(urls: string[]) {
         cache: "no-store",
         signal: controller.signal,
       });
-
       if (!res.ok) {
         errors.push(`Source fetch failed: ${url} ${res.status}`);
         continue;
       }
-
       return { body: await res.text(), requestUrl: url };
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        errors.push(`Source fetch timed out after ${timeoutMs}ms: ${url}`);
-      } else {
-        errors.push(err instanceof Error ? err.message : String(err));
-      }
+      errors.push(err instanceof Error && err.name === "AbortError" ? `Source fetch timed out after ${timeoutMs}ms: ${url}` : err instanceof Error ? err.message : String(err));
     } finally {
       clearTimeout(timeout);
     }
   }
 
   throw new Error(errors.join(" | "));
-}
-
-function extractFromWordPressJson(raw: string, source: SourceConfig) {
-  const data = JSON.parse(raw) as Array<{ link?: string; title?: { rendered?: string } }>;
-  if (!Array.isArray(data)) return [];
-
-  return data
-    .map((item) => ({
-      title: normalizeTitle(item.title?.rendered ?? titleFromUrl(item.link ?? "")),
-      url: item.link ?? "",
-    }))
-    .filter((item) => item.url && item.title)
-    .filter((item) => looksLikeFundingCall(item.title, item.url))
-    .map((item) => ({
-      title: item.title,
-      url: item.url,
-      sourceName: source.name,
-      programHint: source.programHint ?? null,
-      status: inferStatus(item.title),
-      documentType: inferDocumentType(item.url),
-    }));
-}
-
-function extractFromSitemapXml(raw: string, source: SourceConfig) {
-  const $ = cheerio.load(raw, { xmlMode: true });
-  const links: ExtractedLink[] = [];
-
-  $("url > loc").each((_, element) => {
-    const url = normalizeTitle($(element).text());
-    if (!url || !looksLikeFundingCall(titleFromUrl(url), url)) return;
-
-    const title = normalizeTitle(titleFromUrl(url));
-    links.push({
-      title: title || url,
-      url,
-      sourceName: source.name,
-      programHint: source.programHint ?? null,
-      status: inferStatus(title),
-      documentType: inferDocumentType(url),
-    });
-  });
-
-  return links;
 }
 
 function dedupeLinks(links: ExtractedLink[]) {
@@ -198,47 +156,116 @@ function dedupeLinks(links: ExtractedLink[]) {
 function extractFromHtml(raw: string, source: SourceConfig, baseUrl: string): ExtractedLink[] {
   const $ = cheerio.load(raw);
   const links: ExtractedLink[] = [];
-
   $("a").each((_, element) => {
     const rawHref = $(element).attr("href");
     if (!rawHref) return;
     const url = absoluteUrl(rawHref, baseUrl);
     if (!url) return;
-    const documentType = inferDocumentType(url);
     const title = bestLinkTitle($, element, url);
+    const documentType = inferDocumentType(url);
     if (!title || (!documentType && title.length < 8)) return;
     if (!looksLikeFundingCall(title, url)) return;
     links.push({ title, url, sourceName: source.name, programHint: source.programHint ?? null, status: inferStatus(title), documentType });
   });
-
   return links;
 }
 
+function extractFromWordPressJson(raw: string, source: SourceConfig) {
+  const data = JSON.parse(raw) as Array<{ link?: string; title?: { rendered?: string } | string; url?: string }>;
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((item) => {
+      const url = item.link ?? item.url ?? "";
+      const titleValue = typeof item.title === "string" ? item.title : item.title?.rendered ?? "";
+      const title = normalizeTitle(titleValue || titleFromUrl(url));
+      return { title, url };
+    })
+    .filter((item) => item.url && item.title && looksLikeFundingCall(item.title, item.url))
+    .map((item) => ({ title: item.title, url: item.url, sourceName: source.name, programHint: source.programHint ?? null, status: inferStatus(item.title), documentType: inferDocumentType(item.url) }));
+}
+
+function extractFromSitemapXml(raw: string, source: SourceConfig) {
+  const $ = cheerio.load(raw, { xmlMode: true });
+  const links: ExtractedLink[] = [];
+  $("url > loc").each((_, element) => {
+    const url = normalizeTitle($(element).text());
+    const title = normalizeTitle(titleFromUrl(url));
+    if (!url || !looksLikeFundingCall(title, url)) return;
+    links.push({ title: title || url, url, sourceName: source.name, programHint: source.programHint ?? null, status: inferStatus(title), documentType: inferDocumentType(url) });
+  });
+  return links;
+}
+
+async function discoverMfeLinks(source: SourceConfig) {
+  const discoveryUrls = new Set<string>(source.fallbackUrls ?? []);
+  for (const term of MFE_DISCOVERY_TERMS) {
+    discoveryUrls.add(`https://mfe.gov.ro/wp-json/wp/v2/search?search=${encodeURIComponent(term)}&per_page=100`);
+    discoveryUrls.add(`https://mfe.gov.ro/wp-json/wp/v2/pages?search=${encodeURIComponent(term)}&_fields=link,title&per_page=100`);
+    discoveryUrls.add(`https://mfe.gov.ro/wp-json/wp/v2/posts?search=${encodeURIComponent(term)}&_fields=link,title&per_page=100`);
+  }
+
+  const pageCandidates = new Set<string>();
+  const links: ExtractedLink[] = [];
+
+  for (const candidate of [source.url, ...Array.from(discoveryUrls)]) {
+    try {
+      const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(candidate));
+      if (candidate.includes("/wp-json/")) {
+        const discovered = extractFromWordPressJson(body, source);
+        for (const link of discovered) {
+          links.push(link);
+          pageCandidates.add(link.url);
+        }
+        continue;
+      }
+      if (candidate.endsWith(".xml") || body.includes("<urlset")) {
+        const discovered = extractFromSitemapXml(body, source);
+        for (const link of discovered) {
+          links.push(link);
+          pageCandidates.add(link.url);
+        }
+        continue;
+      }
+      for (const link of extractFromHtml(body, source, requestUrl)) {
+        links.push(link);
+        pageCandidates.add(link.url);
+      }
+    } catch {
+      // continue discovery on next candidate
+    }
+  }
+
+  for (const pageUrl of Array.from(pageCandidates).slice(0, 80)) {
+    try {
+      const docs = await fetchDocumentLinksFromPage(pageUrl, `${source.name} documente`);
+      links.push(...docs.map((doc) => ({ ...doc, programHint: doc.programHint ?? source.programHint ?? null })));
+    } catch {
+      // best effort for page-level document discovery
+    }
+  }
+
+  return dedupeLinks(links).slice(0, 250);
+}
 
 export async function fetchDocumentLinksFromPage(pageUrl: string, sourceName: string): Promise<ExtractedLink[]> {
   const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(pageUrl));
-  const links = extractFromHtml(body, { name: sourceName, url: pageUrl, type: "html", enabled: true }, requestUrl)
-    .filter((item) => Boolean(item.documentType));
+  const links = extractFromHtml(body, { name: sourceName, url: pageUrl, type: "html", enabled: true }, requestUrl).filter((item) => Boolean(item.documentType));
   return dedupeLinks(links).slice(0, 20);
 }
 
 export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedLink[]> {
+  if (source.type === "discovery") {
+    const discovered = await discoverMfeLinks(source);
+    if (discovered.length > 0) return discovered;
+    throw new Error(`Discovery produced no links for ${source.name}`);
+  }
+
   const candidates = [source.url, ...(source.fallbackUrls ?? [])];
   const errors: string[] = [];
-
   for (const candidate of candidates) {
     try {
       const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(candidate));
-      let links: ExtractedLink[];
-
-      if (candidate.includes("/wp-json/")) {
-        links = extractFromWordPressJson(body, source);
-      } else if (candidate.endsWith(".xml") || body.includes("<urlset")) {
-        links = extractFromSitemapXml(body, source);
-      } else {
-        links = extractFromHtml(body, source, requestUrl);
-      }
-
+      const links = candidate.includes("/wp-json/") ? extractFromWordPressJson(body, source) : candidate.endsWith(".xml") || body.includes("<urlset") ? extractFromSitemapXml(body, source) : extractFromHtml(body, source, requestUrl);
       const deduped = dedupeLinks(links).slice(0, 120);
       if (deduped.length > 0) return deduped;
       errors.push(`No candidate links matched for ${candidate}`);
@@ -246,6 +273,5 @@ export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedL
       errors.push(err instanceof Error ? err.message : String(err));
     }
   }
-
   throw new Error(errors.join(" | "));
 }
