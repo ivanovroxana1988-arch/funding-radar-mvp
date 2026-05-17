@@ -83,6 +83,7 @@ export default function HomePage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [message, setMessage] = useState("");
+  const [syncToken, setSyncToken] = useState("");
 
   async function loadCalls() {
     setLoading(true);
@@ -103,7 +104,13 @@ export default function HomePage() {
   async function runSync() {
     setSyncing(true);
     setMessage("");
-    const res = await fetch("/api/cron/sync-calls?manual=1");
+    const token = syncToken.trim();
+    if (!token) {
+      setMessage("Introdu token-ul de sync manual.");
+      setSyncing(false);
+      return;
+    }
+    const res = await fetch(`/api/cron/sync-calls?manual=1&token=${encodeURIComponent(token)}`);
     const data = await res.json();
     setMessage(data.message ?? data.error ?? "Sync finalizat.");
     setSyncing(false);
@@ -179,6 +186,7 @@ export default function HomePage() {
           <h1>Radar apeluri europene</h1>
           <p className="muted">Dashboard pentru apeluri de finantare, analiza AI, scor de relevanta si verificari manuale.</p>
           <div className="toolbar">
+            <input className="input secret-input" placeholder="Token sync manual" value={syncToken} onChange={(event) => setSyncToken(event.target.value)} />
             <button className="button" onClick={runSync} disabled={syncing}>{syncing ? "Sincronizez..." : "Ruleaza sync"}</button>
             <button className="button secondary" onClick={loadCalls}>Refresh</button>
             <button className="button secondary" onClick={exportCsv} disabled={filtered.length === 0}>Export CSV</button>

@@ -30,6 +30,7 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [limit, setLimit] = useState("80");
 
   async function loadIdeas() {
     const res = await fetch("/api/project-ideas", { cache: "no-store" });
@@ -56,7 +57,7 @@ export default function MatchesPage() {
     const res = await fetch("/api/matches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_idea_id: selectedIdea }),
+      body: JSON.stringify({ project_idea_id: selectedIdea, limit: Number(limit) || undefined }),
     });
     const data = await res.json();
     setMessage(data.message ?? data.error ?? "Potriviri calculate.");
@@ -95,6 +96,7 @@ export default function MatchesPage() {
             <option value="">Alege o idee</option>
             {ideas.map((idea) => <option key={idea.id} value={idea.id}>{idea.title}</option>)}
           </select>
+          <input className="input" style={{minWidth: 120, maxWidth: 160}} value={limit} onChange={(event) => setLimit(event.target.value)} placeholder="Limita" />
           <button className="button" onClick={calculateMatches} disabled={!selectedIdea}>Cauta potriviri</button>
         </div>
         {selectedTitle && <p><strong>Idee:</strong> {selectedTitle}</p>}

@@ -31,6 +31,7 @@ export default function ProjectIdeasPage() {
   const [budgetMax, setBudgetMax] = useState("");
   const [complexity, setComplexity] = useState("mediu");
   const [message, setMessage] = useState("");
+  const [errors, setErrors] = useState<{ title?: string; description?: string; budget?: string; beneficiaries?: string; activities?: string }>({});
   const [matchingId, setMatchingId] = useState<string | null>(null);
 
   async function loadData() {
@@ -57,6 +58,14 @@ export default function ProjectIdeasPage() {
   async function createIdea(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
+    const nextErrors: { title?: string; description?: string; budget?: string; beneficiaries?: string; activities?: string } = {};
+    if (!title.trim()) nextErrors.title = "Titlul este obligatoriu.";
+    if (!description.trim()) nextErrors.description = "Descrierea este obligatorie.";
+    if (beneficiaries.length === 0) nextErrors.beneficiaries = "Selecteaza cel putin un tip de beneficiar.";
+    if (activities.length === 0) nextErrors.activities = "Selecteaza cel putin o activitate.";
+    if (budgetMin && budgetMax && Number(budgetMin) > Number(budgetMax)) nextErrors.budget = "Bugetul minim nu poate fi mai mare decat bugetul maxim.";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
     const res = await fetch("/api/project-ideas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -75,14 +84,17 @@ export default function ProjectIdeasPage() {
     const data = await res.json();
     if (!res.ok) {
       setMessage(data.error ?? "Ideea nu a putut fi creata.");
+      if ((data.error ?? "").includes("title")) setErrors((current) => ({ ...current, title: "Verifica titlul." }));
       return;
     }
+    setErrors({});
     setMessage("Idee creata. Poti calcula potrivirile.");
     await loadData();
   }
 
   async function findMatches(projectIdeaId: string) {
     setMatchingId(projectIdeaId);
+    setErrors({});
     setMessage("Calculez potrivirile pentru ideea selectata.");
     const res = await fetch("/api/matches", {
       method: "POST",
@@ -91,6 +103,9 @@ export default function ProjectIdeasPage() {
     });
     const data = await res.json();
     setMessage(data.message ?? data.error ?? "Potriviri calculate.");
+    if (data.errors?.length) {
+      setMessage(`${data.message ?? "Potriviri calculate."} ${data.errors.length} apeluri au avut erori.`);
+    }
     setMatchingId(null);
   }
 
@@ -113,16 +128,21 @@ export default function ProjectIdeasPage() {
             </select>
           </label>
           <label>Titlu proiect<input className="input full" value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
+          {errors.title && <p className="error">{errors.title}</p>}
           <label>Descriere<textarea className="textarea" value={description} onChange={(event) => setDescription(event.target.value)} required /></label>
+          {errors.description && <p className="error">{errors.description}</p>}
           <label>Regiune<input className="input full" value={targetRegion} onChange={(event) => setTargetRegion(event.target.value)} /></label>
           <div className="checkbox-grid">
             <div><strong>Beneficiari</strong>{beneficiaryOptions.map((item) => <label className="check" key={item}><input type="checkbox" checked={beneficiaries.includes(item)} onChange={() => toggle(beneficiaries, item, setBeneficiaries)} />{item}</label>)}</div>
             <div><strong>Activitati</strong>{activityOptions.map((item) => <label className="check" key={item}><input type="checkbox" checked={activities.includes(item)} onChange={() => toggle(activities, item, setActivities)} />{item}</label>)}</div>
           </div>
+          {errors.beneficiaries && <p className="error">{errors.beneficiaries}</p>}
+          {errors.activities && <p className="error">{errors.activities}</p>}
           <div className="split-inputs">
             <label>Buget minim<input className="input full" value={budgetMin} onChange={(event) => setBudgetMin(event.target.value)} /></label>
             <label>Buget maxim<input className="input full" value={budgetMax} onChange={(event) => setBudgetMax(event.target.value)} /></label>
           </div>
+          {errors.budget && <p className="error">{errors.budget}</p>}
           <label>Complexitate
             <select className="select full" value={complexity} onChange={(event) => setComplexity(event.target.value)}>
               <option value="simplu">simplu</option>
