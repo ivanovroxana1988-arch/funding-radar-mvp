@@ -150,3 +150,74 @@ create table if not exists document_chunks (
 );
 
 create index if not exists document_chunks_call_id_idx on document_chunks(call_id);
+
+create table if not exists import_runs (
+  id uuid primary key default gen_random_uuid(),
+  source_name text not null default 'mfe.gov.ro',
+  trigger_type text not null check (trigger_type in ('manual','scheduled','reprocess')),
+  seed_set text not null,
+  status text not null check (status in ('queued','running','completed','completed_with_warnings','failed','cancelled')),
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  pages_attempted int not null default 0,
+  pages_succeeded int not null default 0,
+  pages_failed int not null default 0,
+  files_discovered int not null default 0,
+  files_downloaded int not null default 0,
+  items_parsed int not null default 0,
+  calls_upserted int not null default 0,
+  warnings_count int not null default 0,
+  error_message text,
+  meta jsonb not null default '{}'::jsonb
+);
+
+create table if not exists raw_source_items (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references import_runs(id) on delete cascade,
+  source_name text not null default 'mfe.gov.ro',
+  discovery_method text not null,
+  parent_url text,
+  seed_url text not null,
+  discovered_url text not null,
+  final_url text,
+  canonical_url text,
+  item_type text not null check (item_type in ('html','json','pdf','doc','docx','xls','xlsx','csv','txt','unknown')),
+  mime_type text,
+  http_status int,
+  response_headers jsonb not null default '{}'::jsonb,
+  etag text,
+  last_modified text,
+  bytes_count bigint,
+  title text,
+  body_html text,
+  body_text text,
+  extracted_json jsonb not null default '{}'::jsonb,
+  content_hash text,
+  binary_hash text,
+  parse_status text not null default 'pending' check (parse_status in ('pending','parsed','no_fields','blocked','download_failed','parse_failed')),
+  error_message text,
+  collected_at timestamptz not null default now(),
+  processed_at timestamptz
+);
+
+create unique index if not exists raw_source_items_canonical_url_uq
+  on raw_source_items (canonical_url)
+  where canonical_url is not null;
+
+create index if not exists raw_source_items_run_id_idx on raw_source_items(run_id);
+create index if not exists raw_source_items_content_hash_idx on raw_source_items(content_hash);
+create index if not exists raw_source_items_binary_hash_idx on raw_source_items(binary_hash);
+create index if not exists raw_source_items_http_status_idx on raw_source_items(http_status, collected_at desc);
+
+alter table funding_calls add column if not exists source_item_id uuid references raw_source_items(id) on delete set null;
+alter table funding_calls add column if not exists canonical_url text;
+alter table funding_calls add column if not exists program_code text;
+alter table funding_calls add column if not exists date_precision text;
+alter table funding_calls add column if not exists launch_at timestamptz;
+alter table funding_calls add column if not exists launch_text text;
+alter table funding_calls add column if not exists budget_amount numeric;
+alter table funding_calls add column if not exists budget_currency text;
+alter table funding_calls add column if not exists contacts jsonb default '[]'::jsonb;
+alter table funding_calls add column if not exists documents jsonb default '[]'::jsonb;
+alter table funding_calls add column if not exists search_key text;
+alter table funding_calls add column if not exists fingerprint text;

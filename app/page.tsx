@@ -79,11 +79,9 @@ export default function HomePage() {
   const [profiles, setProfiles] = useState<FundingProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [message, setMessage] = useState("");
-  const [syncToken, setSyncToken] = useState("");
 
   async function loadCalls() {
     setLoading(true);
@@ -99,22 +97,6 @@ export default function HomePage() {
     const nextProfiles = data.profiles ?? [];
     setProfiles(nextProfiles);
     setSelectedProfile((current) => current || nextProfiles[0]?.id || "");
-  }
-
-  async function runSync() {
-    setSyncing(true);
-    setMessage("");
-    const token = syncToken.trim();
-    if (!token) {
-      setMessage("Introdu token-ul de sync manual.");
-      setSyncing(false);
-      return;
-    }
-    const res = await fetch(`/api/cron/sync-calls?manual=1&token=${encodeURIComponent(token)}`);
-    const data = await res.json();
-    setMessage(data.message ?? data.error ?? "Sync finalizat.");
-    setSyncing(false);
-    await loadCalls();
   }
 
   async function analyze(callId: string) {
@@ -185,9 +167,8 @@ export default function HomePage() {
           <div className="kicker">Funding intelligence</div>
           <h1>Radar apeluri europene</h1>
           <p className="muted">Dashboard pentru apeluri de finantare, analiza AI, scor de relevanta si verificari manuale.</p>
+          <p className="muted">Sincronizarea ruleaza automat din Vercel Cron, conform programului configurat in `vercel.json`.</p>
           <div className="toolbar">
-            <input className="input secret-input" placeholder="Token sync manual" value={syncToken} onChange={(event) => setSyncToken(event.target.value)} />
-            <button className="button" onClick={runSync} disabled={syncing}>{syncing ? "Sincronizez..." : "Ruleaza sync"}</button>
             <button className="button secondary" onClick={loadCalls}>Refresh</button>
             <button className="button secondary" onClick={exportCsv} disabled={filtered.length === 0}>Export CSV</button>
             <Link className="button secondary" href="/profiles">Profiluri</Link>
