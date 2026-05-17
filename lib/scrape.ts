@@ -49,7 +49,6 @@ function buildRequestAttempts(url: string) {
   return direct;
 }
 
-
 function buildRequestUrls(url: string) {
   return buildRequestAttempts(url);
 }
@@ -158,10 +157,9 @@ function bestLinkTitle($: CheerioAPI, element: AnyNode, url: string) {
 async function fetchTextWithFallback(urls: string[]) {
   const timeoutMs = envInt("SOURCE_FETCH_TIMEOUT_MS", DEFAULT_FETCH_TIMEOUT_MS);
   const errors: string[] = [];
-  const attempts = urls;
   const userAgents = parseUserAgents();
 
-  for (const attemptUrl of attempts) {
+  for (const attemptUrl of urls) {
     for (const userAgent of userAgents) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
