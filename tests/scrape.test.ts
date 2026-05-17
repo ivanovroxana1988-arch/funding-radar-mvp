@@ -22,7 +22,7 @@ test("inferDocumentType detects supported documents", () => {
 
 test("AI analysis schema requires the dashboard fields", () => {
   const required = new Set(analysisSchema.required);
-  for (const key of ["summary", "relevance_score", "recommendation", "manual_checks"]) {
+  for (const key of ["summary", "relevance_score", "recommendation", "manual_checks"] as const) {
     assert.equal(required.has(key), true);
   }
   assert.equal(analysisSchema.additionalProperties, false);
