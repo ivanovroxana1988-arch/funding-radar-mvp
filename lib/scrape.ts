@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
-import type { CheerioAPI, Element } from "cheerio";
+import type { CheerioAPI } from "cheerio";
+import type { AnyNode } from "domhandler";
 import type { ExtractedLink, SourceConfig } from "./types";
 
 const DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv"];
@@ -128,7 +129,7 @@ function titleFromUrl(url: string) {
   }
 }
 
-function nearbyTitle($: CheerioAPI, element: Element) {
+function nearbyTitle($: CheerioAPI, element: AnyNode) {
   const container = $(element).closest(
     "article, li, tr, .card, .post, .entry, .elementor-post, .wp-block-post, .vc_grid-item, .item, .news-item, .post-item"
   );
@@ -143,7 +144,7 @@ function nearbyTitle($: CheerioAPI, element: Element) {
   return rowText.length >= 12 ? rowText : "";
 }
 
-function bestLinkTitle($: CheerioAPI, element: Element, url: string) {
+function bestLinkTitle($: CheerioAPI, element: AnyNode, url: string) {
   const rawText = normalizeTitle($(element).text());
   const aria = normalizeTitle($(element).attr("aria-label") ?? "");
   const titleAttr = normalizeTitle($(element).attr("title") ?? "");
