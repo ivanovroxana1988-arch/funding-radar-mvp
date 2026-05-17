@@ -41,31 +41,7 @@ export function inferDocumentType(url: string) {
 export function looksLikeFundingCall(text: string, href: string) {
   const haystack = normalizeForMatch(`${text} ${href}`);
 
-  const positive = [
-    "apel",
-    "ghid",
-    "finantare",
-    "finantari",
-    "proiecte",
-    "consultare",
-    "lansat",
-    "lansare",
-    "calendar",
-    "peo",
-    "podd",
-    "pos",
-    "ptj",
-    "por",
-    "pids",
-    "program",
-    "mysmis",
-    "grant",
-    "fonduri",
-    "cerere de finantare",
-    ".pdf",
-    ".docx",
-    ".xlsx",
-  ];
+  const positive = ["apel", "ghid", "finantare", "finantari", "proiecte", "consultare", "lansat", "lansare", "calendar", "peo", "poeo", "podd", "pos", "ptj", "potj", "por", "pids", "poids", "pocidif", "pocu", "pnrr", "fse", "feder", "program", "mysmis", "grant", "fonduri", "cerere de finantare", ".pdf", ".docx", ".xlsx"];
 
   const negative = [
     "facebook",
