@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { syncAllSources } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function isAuthorized(request: Request) {
   const url = new URL(request.url);
