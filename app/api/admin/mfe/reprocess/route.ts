@@ -7,7 +7,7 @@ export async function POST() {
     .from("raw_source_items")
     .update({ parse_status: "pending", processed_at: null })
     .in("parse_status", ["parsed", "no_fields", "parse_failed"])
-    .select("id", { count: "exact" });
+    .select("id");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ reset_items: data?.length ?? 0 });
