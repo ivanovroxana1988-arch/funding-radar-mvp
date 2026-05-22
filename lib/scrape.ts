@@ -184,6 +184,28 @@ function extractFromWordPressJson(raw: string, source: SourceConfig) {
     .map((item) => ({ title: item.title, url: item.url, sourceName: source.name, programHint: source.programHint ?? null, status: inferStatus(item.title), documentType: inferDocumentType(item.url) }));
 }
 
+
+
+function isWordPressApiUrl(url: string) {
+  return url.includes('/wp-json/');
+}
+
+function buildPaginatedWpUrls(url: string, pages = 3) {
+  if (!isWordPressApiUrl(url)) return [url];
+  const output: string[] = [];
+  for (let page = 1; page <= pages; page++) {
+    try {
+      const u = new URL(url);
+      u.searchParams.set('page', String(page));
+      output.push(u.toString());
+    } catch {
+      output.push(url);
+      break;
+    }
+  }
+  return output;
+}
+
 function extractFromSitemapXml(raw: string, source: SourceConfig) {
   const $ = cheerio.load(raw, { xmlMode: true });
   const links: ExtractedLink[] = [];
@@ -207,17 +229,18 @@ async function discoverMfeLinks(source: SourceConfig) {
   const pageCandidates = new Set<string>();
   const links: ExtractedLink[] = [];
 
-  for (const candidate of [source.url, ...Array.from(discoveryUrls)]) {
-    try {
-      const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(candidate));
-      if (candidate.includes("/wp-json/")) {
-        const discovered = extractFromWordPressJson(body, source);
-        for (const link of discovered) {
-          links.push(link);
-          pageCandidates.add(link.url);
+  for (const seedCandidate of [source.url, ...Array.from(discoveryUrls)]) {
+    for (const candidate of buildPaginatedWpUrls(seedCandidate, envInt("MFE_WP_PAGES", 4))) {
+      try {
+        const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(candidate));
+        if (isWordPressApiUrl(candidate)) {
+          const discovered = extractFromWordPressJson(body, source);
+          for (const link of discovered) {
+            links.push(link);
+            pageCandidates.add(link.url);
+          }
+          continue;
         }
-        continue;
-      }
       if (candidate.endsWith(".xml") || body.includes("<urlset")) {
         const discovered = extractFromSitemapXml(body, source);
         for (const link of discovered) {
@@ -226,12 +249,13 @@ async function discoverMfeLinks(source: SourceConfig) {
         }
         continue;
       }
-      for (const link of extractFromHtml(body, source, requestUrl)) {
-        links.push(link);
-        pageCandidates.add(link.url);
+        for (const link of extractFromHtml(body, source, requestUrl)) {
+          links.push(link);
+          pageCandidates.add(link.url);
+        }
+      } catch {
+        // continue discovery on next candidate
       }
-    } catch {
-      // continue discovery on next candidate
     }
   }
 
@@ -262,15 +286,17 @@ export async function fetchSourceLinks(source: SourceConfig): Promise<ExtractedL
 
   const candidates = [source.url, ...(source.fallbackUrls ?? [])];
   const errors: string[] = [];
-  for (const candidate of candidates) {
+  for (const rawCandidate of candidates) {
+    for (const candidate of buildPaginatedWpUrls(rawCandidate, envInt("SOURCE_WP_PAGES", 3))) {
     try {
       const { body, requestUrl } = await fetchTextWithFallback(buildRequestUrls(candidate));
-      const links = candidate.includes("/wp-json/") ? extractFromWordPressJson(body, source) : candidate.endsWith(".xml") || body.includes("<urlset") ? extractFromSitemapXml(body, source) : extractFromHtml(body, source, requestUrl);
+      const links = isWordPressApiUrl(candidate) ? extractFromWordPressJson(body, source) : candidate.endsWith(".xml") || body.includes("<urlset") ? extractFromSitemapXml(body, source) : extractFromHtml(body, source, requestUrl);
       const deduped = dedupeLinks(links).slice(0, 120);
       if (deduped.length > 0) return deduped;
-      errors.push(`No candidate links matched for ${candidate}`);
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : String(err));
+        errors.push(`No candidate links matched for ${candidate}`);
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : String(err));
+      }
     }
   }
   throw new Error(errors.join(" | "));
