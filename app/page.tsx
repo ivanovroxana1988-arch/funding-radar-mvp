@@ -79,6 +79,7 @@ export default function HomePage() {
   const [profiles, setProfiles] = useState<FundingProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [message, setMessage] = useState("");
@@ -97,6 +98,25 @@ export default function HomePage() {
     const nextProfiles = data.profiles ?? [];
     setProfiles(nextProfiles);
     setSelectedProfile((current) => current || nextProfiles[0]?.id || "");
+  }
+
+  async function runSync() {
+    setSyncing(true);
+    setMessage("Rulez sincronizarea cu sursele oficiale. Poate dura cateva zeci de secunde.");
+    try {
+      const res = await fetch("/api/cron/sync-calls?manual=1", { method: "POST", cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(data.error ?? `Sync esuat (${res.status}).`);
+      } else {
+        setMessage(data.message ?? "Sincronizare finalizata.");
+      }
+      await loadCalls();
+    } catch (err) {
+      setMessage(err instanceof Error ? `Eroare la sincronizare: ${err.message}` : "Eroare la sincronizare.");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function analyze(callId: string) {
@@ -169,6 +189,7 @@ export default function HomePage() {
           <p className="muted">Dashboard pentru apeluri de finantare, analiza AI, scor de relevanta si verificari manuale.</p>
           <p className="muted">Sincronizarea ruleaza automat din Vercel Cron, conform programului configurat in `vercel.json`.</p>
           <div className="toolbar">
+            <button className="button" onClick={runSync} disabled={syncing}>{syncing ? "Sincronizez..." : "Sincronizeaza acum"}</button>
             <button className="button secondary" onClick={loadCalls}>Refresh</button>
             <button className="button secondary" onClick={exportCsv} disabled={filtered.length === 0}>Export CSV</button>
             <Link className="button secondary" href="/profiles">Profiluri</Link>
@@ -200,13 +221,21 @@ export default function HomePage() {
         </div>
       </section>
 
-      {loading ? <section className="panel"><p className="muted">Incarc apelurile.</p></section> : (
-        <section className="radar-grid">
-          <CategorySection title="Nou aparute" calls={categories.newCalls} empty="Nu exista apeluri noi in ultimele 7 zile." onAnalyze={analyze} />
-          <CategorySection title="Merita analizate" calls={categories.worthReview} empty="Nu exista apeluri cu scor de minimum 65." onAnalyze={analyze} />
-          <CategorySection title="Deadline apropiat" calls={categories.deadlineSoon} empty="Nu exista deadline-uri in urmatoarele 30 de zile." onAnalyze={analyze} />
-          <CategorySection title="Modificate" calls={categories.modified} empty="Nu exista apeluri modificate recent." onAnalyze={analyze} />
+      {loading ? <section className="panel"><p className="muted">Incarc apelurile.</p></section> : calls.length === 0 ? (
+        <section className="panel">
+          <h2>Nu exista inca apeluri</h2>
+          <p className="muted">Apasa "Sincronizeaza acum" pentru a aduce apeluri din MFE si Oportunitati UE. Sincronizarea automata ruleaza zilnic la ora 06:00 (Vercel Cron).</p>
         </section>
+      ) : (
+        <>
+          <section className="radar-grid">
+            <CategorySection title="Nou aparute" calls={categories.newCalls} empty="Nu exista apeluri noi in ultimele 7 zile." onAnalyze={analyze} />
+            <CategorySection title="Merita analizate" calls={categories.worthReview} empty="Nu exista apeluri cu scor de minimum 65." onAnalyze={analyze} />
+            <CategorySection title="Deadline apropiat" calls={categories.deadlineSoon} empty="Nu exista deadline-uri in urmatoarele 30 de zile." onAnalyze={analyze} />
+            <CategorySection title="Modificate" calls={categories.modified} empty="Nu exista apeluri modificate recent." onAnalyze={analyze} />
+          </section>
+          <CategorySection title="Toate apelurile" calls={filtered} empty="Niciun apel nu corespunde filtrelor." onAnalyze={analyze} />
+        </>
       )}
     </main>
   );
