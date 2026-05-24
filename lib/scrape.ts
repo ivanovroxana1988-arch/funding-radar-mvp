@@ -16,11 +16,20 @@ const MFE_DISCOVERY_TERMS = [
   "consultare",
   "calendar",
   "peo",
+  "poeo",
   "podd",
   "ptj",
+  "potj",
   "pids",
+  "poids",
   "pocid",
+  "pocidif",
+  "pocu",
+  "por",
   "programul sanatate",
+  "pnrr",
+  "fse",
+  "feder",
 ];
 
 function absoluteUrl(href: string, base: string) {
@@ -57,7 +66,7 @@ export function inferDocumentType(url: string) {
 
 export function looksLikeFundingCall(text: string, href: string) {
   const haystack = normalizeForMatch(`${text} ${href}`);
-  const positive = ["apel", "ghid", "finantare", "finantari", "proiecte", "consultare", "lansat", "lansare", "calendar", "peo", "podd", "pos", "ptj", "por", "pids", "program", "mysmis", "grant", "fonduri", "cerere de finantare", ".pdf", ".docx", ".xlsx"];
+  const positive = ["apel", "ghid", "finantare", "finantari", "proiecte", "consultare", "lansat", "lansare", "calendar", "peo", "poeo", "podd", "pos", "ptj", "potj", "por", "pids", "poids", "pocidif", "pocu", "pnrr", "fse", "feder", "program", "mysmis", "grant", "fonduri", "cerere de finantare", ".pdf", ".docx", ".xlsx"];
   const negative = ["facebook", "twitter", "x.com", "linkedin", "youtube", "instagram", "privacy", "cookie", "contact", "wp-content/uploads/logo", "javascript:", "mailto:", "tel:"];
   return positive.some((word) => haystack.includes(word)) && !negative.some((word) => haystack.includes(word));
 }
@@ -122,9 +131,17 @@ async function fetchTextWithFallback(urls: string[]) {
     try {
       const res = await fetch(url, {
         headers: {
-          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 FundingRadar/0.1",
-          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/json;q=0.7",
           "accept-language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
+          "sec-ch-ua": '"Chromium";v="126", "Google Chrome";v="126", "Not?A_Brand";v="24"',
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": '"Windows"',
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
         },
         cache: "no-store",
         signal: controller.signal,
@@ -235,7 +252,7 @@ async function discoverMfeLinks(source: SourceConfig) {
     }
   }
 
-  for (const pageUrl of Array.from(pageCandidates).slice(0, 80)) {
+  for (const pageUrl of Array.from(pageCandidates).slice(0, 150)) {
     try {
       const docs = await fetchDocumentLinksFromPage(pageUrl, `${source.name} documente`);
       links.push(...docs.map((doc) => ({ ...doc, programHint: doc.programHint ?? source.programHint ?? null })));
@@ -244,7 +261,7 @@ async function discoverMfeLinks(source: SourceConfig) {
     }
   }
 
-  return dedupeLinks(links).slice(0, 250);
+  return dedupeLinks(links).slice(0, 400);
 }
 
 export async function fetchDocumentLinksFromPage(pageUrl: string, sourceName: string): Promise<ExtractedLink[]> {
