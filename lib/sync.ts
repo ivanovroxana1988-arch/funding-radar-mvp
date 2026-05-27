@@ -192,10 +192,10 @@ async function analyzeCallForProfiles(input: {
   return { analyzed: 1, matches };
 }
 
-export async function syncAllSources() {
+export async function syncAllSources(options: { quick?: boolean } = {}) {
   const supabase = getSupabaseAdmin();
-  const documentLimit = envInt("SYNC_DOCUMENT_LIMIT", 8);
-  const analyzeLimit = envInt("SYNC_ANALYZE_LIMIT", 2);
+  const documentLimit = options.quick ? 0 : envInt("SYNC_DOCUMENT_LIMIT", 8);
+  const analyzeLimit = options.quick ? 0 : envInt("SYNC_ANALYZE_LIMIT", 2);
   const profileLimit = envInt("SYNC_PROFILE_LIMIT", 4);
 
   let insertedOrUpdated = 0;

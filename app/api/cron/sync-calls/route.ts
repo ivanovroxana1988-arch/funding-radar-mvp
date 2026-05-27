@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { syncAllSources } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function isAuthorized(request: Request) {
   const url = new URL(request.url);
@@ -28,10 +28,16 @@ async function handle(request: Request) {
   }
 
   try {
-    const result = await syncAllSources();
+    const url = new URL(request.url);
+    const quick = url.searchParams.get("quick") === "1" || url.searchParams.get("manual") === "1";
+    const result = await syncAllSources({ quick });
+
+    const suffix = quick
+      ? "(mod rapid: fara documente / analiza AI)"
+      : `${result.documentsSaved} documente, ${result.analyzedCalls} analizate AI, ${result.matchesSaved} potriviri salvate.`;
 
     return NextResponse.json({
-      message: `Sync finalizat: ${result.insertedOrUpdated} noi/modificate, ${result.unchanged} neschimbate, ${result.documentsSaved} documente, ${result.analyzedCalls} analizate AI, ${result.matchesSaved} potriviri salvate.`,
+      message: `Sync finalizat: ${result.insertedOrUpdated} noi/modificate, ${result.unchanged} neschimbate. ${suffix}`,
       ...result,
     });
   } catch (err) {
